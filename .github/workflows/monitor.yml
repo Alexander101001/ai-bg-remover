@@ -1,0 +1,43 @@
+name: 24/7 Monitor & Auto-Recover
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all deployments
+        run: |
+          echo "🔍 Checking deployments at $(date)"
+          
+          declare -a URLS=(
+            "https://alexander101001.github.io/ai-bg-remover/"
+            "https://alexandergreater90-ai-bg-remover-static.static.hf.space"
+            "https://cdn.jsdelivr.net/gh/Alexander101001/ai-bg-remover@main/static/index.html"
+          )
+          
+          for url in "${URLS[@]}"; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" || echo "000")
+            echo "  $status  $url"
+            if [ "$status" != "200" ]; then
+              echo "❌ FAILURE: $url"
+              echo "failure_url=$url" >> $GITHUB_OUTPUT
+            fi
+          done
+          
+          echo "✅ Health check complete"
+      
+      - name: Create issue if failures
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Deployment Failure Detected',
+              body: 'One or more deployments are down. Check logs.'
+            })
